@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>uEditor-framework-inject</title>
+</head>
+
+<body>
+    <h1>uEditor-framework-inject</h1>
+
+    <!-- 加载编辑器的容器 -->
+    <!-- <el-button type="primary">主要按钮</el-button><el-input placeholder="请输入内容"></el-input> -->
+    <script id="container" name="content" type="text/plain"></script>
+    <!-- 配置文件 -->
+    <script type="text/javascript" src="./js/lib/ueditor.config.js"></script>
+    <!-- 编辑器源码文件 -->
+    <script type="text/javascript" src="./js/lib/ueditor.all.new.js"></script>
+    <!-- 样式框架注入器 -->
+    <script type="text/javascript" src="./js/ui-framework-injector.js"></script>
+    <!-- 注入后导致的bug修复 -->
+    <script type="text/javascript" src="./js/ueditor-bug-fix.js"></script>
+    <!-- 实例化编辑器 -->
+    <script type="text/javascript">
+        window.ue = UE.getEditor('container')
+
+        ue.allowDivTransToP = false
+
+        ue.addListener('ready', function () {
+            ueditorBugFix(ue)
+            console.log(this.window.parent.ue)
+        })
+
+        const vueContainerList = []
+        function markVueComponent(node) {
+            const children = node.children
+            if (!children || children.length < 1) {
+                return
+            }
+            for (let i = 0; i < children.length; i++) {
+                if (children[i].nodeType === 1) {
+                    if (children[i].nodeName.toLowerCase().startsWith('el-')) {
+                        let parent = children[i].parentElement
+                        if (parent && parent.nodeName === 'BODY') {
+                            parent = children[i]
+                        }
+                        const id = `component-id-${vueContainerList.length}`
+                        const data = {
+                            id: id,
+                            el: parent,
+                            html: parent.outerHTML
+                        }
+
+                        parent.id = id
+                        data.useHTML=parent.outerHTML
+
+                        vueContainerList.push(data)
+                    } else {
+                        markVueComponent(children[i])
+                    }
+                }
+            }
+        }
+
+        ue.addListener('sourcemodechanged', function (t, enabled) {
+            let contentCache = []
+            if (enabled) {
+                if (contentCache.length > 0) {
+                    ue.setContent(contentCache[contentCache.length - 1].content)
+                }
+            } else {
+                const content = ue.getContent()
+                contentCache.push({
+                    time: +new Date(),
+                    content: content
+                })
+
+                // window.oh = ''
+                // window.vh = ''
+                // this.window.eval(`new Vue({el:"#vueContaienr",
+                // beforeMount(){window.parent.oh=document.getElementById("vueContaienr").innerHTML},
+                // mounted(){window.parent.vh=this.$el.innerHTML}})`)
+                markVueComponent(this.window.document.body)
+                console.log(vueContainerList)
+            }
+        })
+
+
+        ue.addListener('contentChange', function () {
+            console.log()
+        })
+    </script>
+
+    <p id="p-html">
+        &lt;div data-vue="true" id="vueContaienr" contenteditable="false" &gt;&lt;el-button type="primary"&gt;主要按钮&lt;/el-button&gt;&lt;/div&gt;
+    </p>
+</body>
+
+</html>
