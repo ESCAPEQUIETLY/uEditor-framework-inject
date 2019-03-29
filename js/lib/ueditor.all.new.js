@@ -8819,9 +8819,9 @@
              * node.toHtml( true );
              * ```
              */
-            toHtml: function (formatter) {
-                var arr = [];
-                nodeToHtml(this, arr, formatter, 0);
+            toHtml: function (formatter, show) {
+                var arr = []
+                nodeToHtml(this, arr, formatter, 0)
                 return arr.join('')
             },
 
@@ -9950,7 +9950,7 @@
     UE.plugins['defaultfilter'] = function () {
         var me = this;
         me.setOpt({
-            'allowDivTransToP': false,
+            'allowDivTransToP': true,
             'disabledTableInTable': true
         });
         //默认的过滤处理
@@ -16261,8 +16261,6 @@
              */
 
             me.commands['source'] = {
-                //ling:在这里进行内容的劫持
-                //当源码切换内容之前记录当前html为原始值，切换完成后执行vue的构造操作
                 execCommand: function () {
                     sourceMode = !sourceMode;
 
@@ -16307,11 +16305,12 @@
                         sourceEditor.setContent(content);
 
                         orgSetContent = me.setContent;
-
+                        console.log(me)
                         me.setContent = function (html) {
                             //这里暂时不触发事件，防止报错
                             var root = UE.htmlparser(html);
                             me.filterInputRule(root);
+                            //ling:toHtml(true),整理代码格式
                             html = root.toHtml();
                             sourceEditor.setContent(html);
                         };

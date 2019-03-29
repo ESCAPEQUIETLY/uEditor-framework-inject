@@ -19,8 +19,16 @@
                 }
             })
 
-            new Vue({
+            const md = {
                 el: '#container2',
+                created() {
+                    console.log('created')
+                    console.log(this.abc)
+                }
+            }
+
+            new Vue({
+                mixins: [md],
                 data: {
                     abc: 1
                 }

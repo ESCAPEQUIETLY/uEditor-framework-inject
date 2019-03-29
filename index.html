@@ -18,76 +18,142 @@
     <script type="text/javascript" src="./js/lib/ueditor.config.js"></script>
     <!-- 编辑器源码文件 -->
     <script type="text/javascript" src="./js/lib/ueditor.all.new.js"></script>
+    <!-- 注入导致的bug修复，功能实现 -->
+    <script type="text/javascript" src="./js/ueditor-need-cover.js"></script>
     <!-- 样式框架注入器 -->
     <script type="text/javascript" src="./js/ui-framework-injector.js"></script>
-    <!-- 注入后导致的bug修复 -->
-    <script type="text/javascript" src="./js/ueditor-bug-fix.js"></script>
+
     <!-- 实例化编辑器 -->
     <script type="text/javascript">
         window.ue = UE.getEditor('container')
 
-        ue.allowDivTransToP = false
-
-        ue.addListener('ready', function () {
-            ueditorBugFix(ue)
-            console.log(this.window.parent.ue)
+        ue.setOpt({
+            'allowDivTransToP': false,
+            'disabledTableInTable': true
         })
 
-        const vueContainerList = []
-        function markVueComponent(node) {
-            const children = node.children
-            if (!children || children.length < 1) {
-                return
-            }
-            for (let i = 0; i < children.length; i++) {
-                if (children[i].nodeType === 1) {
-                    if (children[i].nodeName.toLowerCase().startsWith('el-')) {
-                        let parent = children[i].parentElement
-                        if (parent && parent.nodeName === 'BODY') {
-                            parent = children[i]
-                        }
-                        const id = `component-id-${vueContainerList.length}`
-                        const data = {
-                            id: id,
-                            el: parent,
-                            html: parent.outerHTML
-                        }
+        ue.addListener('ready', function () {
+            ueditorNeedCover(this)
+        })
 
-                        parent.id = id
-                        data.useHTML=parent.outerHTML
-                        
-                        vueContainerList.push(data)
+        function getNeedInitVueContainer(doc) {
+            const body = doc.body
+            const vueContainerList = []
 
-                    } else {
-                        markVueComponent(children[i])
+            function markVueComponent(node) {
+                const children = node.children
+                if (!children || children.length < 1) {
+                    return
+                }
+
+                for (let i = 0; i < children.length; i++) {
+                    if (children[i].nodeType === 1) {
+                        if (children[i].nodeName.toLowerCase().startsWith('el-')) {
+                            let parent = children[i].parentElement
+                            if (parent && parent.nodeName === 'BODY') {
+                                parent = children[i]
+                            }
+
+                            const originalHtml = parent.outerHTML
+                            parent.id = `component-id-${vueContainerList.length}`
+                            parent.contentEditable = false
+
+                            const data = {
+                                index: vueContainerList.length,
+                                id: parent.id,
+                                container: parent,
+                                outerHTML: parent.outerHTML,
+                                originalHtml: originalHtml
+                            }
+
+                            vueContainerList.push(data)
+
+                        } else {
+                            markVueComponent(children[i])
+                        }
                     }
                 }
             }
+
+            markVueComponent(body)
+
+            //由于需要编译的部分是不能进行编辑的，所以当body最后一个元素是不能进行编辑的，需要采用相同规则：补充一个p占位
+            if (body.children.length > 0) {
+                if (vueContainerList.some(item => {
+                    return item.container === body.children[body.children.length - 1]
+                })) {
+                    const p = doc.createElement('p')
+                    p.innerHTML = '<br />'
+                    body.appendChild(p)
+                }
+            }
+
+            return vueContainerList
         }
 
-        ue.addListener('sourcemodechanged', function (t, enabled) {
-            let contentCache = []
-            if (enabled) {
-                if (contentCache.length > 0) {
-                    ue.setContent(contentCache[contentCache.length - 1].content)
-                }
-            } else {
-                const content = ue.getContent()
-                contentCache.push({
-                    time: +new Date(),
-                    content: content
-                })
+        function createJsTemplate() {
 
-                // window.oh = ''
-                // window.vh = ''
-                // this.window.eval(`new Vue({el:"#vueContaienr",
-                // beforeMount(){window.parent.oh=document.getElementById("vueContaienr").innerHTML},
-                // mounted(){window.parent.vh=this.$el.innerHTML}})`)
-                markVueComponent(this.window.document.body)
-                console.log(vueContainerList)
+        }
+
+        function getUeditorHtml(html, format) {
+            //这里执行和ueditor的getContent方法相同操作流程
+            //root.traversal 操作没加，代码太多影响阅读
+            let root = UE.htmlparser(html)
+            ue.filterOutputRule(root)
+            return root.toHtml(format)
+        }
+
+        window.vueContainerList = []
+        ue.addListener('sourcemodechanged', function (t, enabled) {
+            if (enabled) {
+                let html = this.getContent()
+                let newHtml = html
+                if (vueContainerList && vueContainerList.length > 0) {
+                    vueContainerList.forEach(item => {
+                        //这里保持和sourcemode的源生change事件一致
+                        item.compileOuterHtml = getUeditorHtml(item.compileOuterHtml, true)
+                        newHtml = newHtml.replace(item.compileOuterHtml, item.originalHtml)
+
+                    })
+                }
+
+                if (newHtml !== html) {
+                    console.log(newHtml)
+                    this.setContent(newHtml)
+                }
+
+            } else {
+
+                vueContainerList = getNeedInitVueContainer(this.window.document)
+
+                if (vueContainerList && vueContainerList.length > 0) {
+                    //将需要初始化的容器组合成执行js语句
+                    const evalStr = vueContainerList.map(item => `new Vue({
+                        el:'#${item.id}',
+                             beforeMount(){
+                                 ${item.getBeforeMount && item.getBeforeMount()}
+                             },
+                            mounted(){
+                                window.parent.vueContainerList[${item.index}].compileOuterHtml=this.$el.outerHTML
+                                ${item.getMounted && item.getMounted()}
+                             }
+                    })`
+                        // `new Vue({
+                        //     el:'#${item.id}',
+                        //     beforeCreate(){
+                        //         ${item.getBeforeCreate()}
+                        //     }
+                        //     created(){
+                        //         ${item.getCreated()}
+                        //     }
+                        // })`
+                    ).join(';')
+
+                    this.window.eval(evalStr)
+
+                }
             }
         })
-
 
         ue.addListener('contentChange', function () {
             console.log()
@@ -95,7 +161,7 @@
     </script>
 
     <p id="p-html">
-        &lt;div data-vue="true" id="vueContaienr" contenteditable="false" &gt;&lt;el-button type="primary"&gt;主要按钮&lt;/el-button&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;el-button type="primary"&gt;主要按钮&lt;/el-button&gt;&lt;/div&gt;
     </p>
 </body>
 
