@@ -117,7 +117,6 @@ const getDecompileHtml = function (html, componentContainerList, format) {
     if (newHtml.endsWith('<p><br/></p>')) {
         newHtml = newHtml.substring(0, newHtml.length - '<p><br/></p>'.length)
     }
-    console.log(newHtml)
     return newHtml
 }
 
