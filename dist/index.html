@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>uEditor-framework-inject</title>
+    <style>
+        .add-container {
+            border: 1px solid #eee;
+            margin: 20px;
+            padding: 20px;
+        }
+
+        .add-container>* {
+            margin: 10px;
+            line-height: 26px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>uEditor-framework-inject</h1>
+
+    <!-- 这里模拟一个添加【InputNumber 计数器】的模态框 -->
+    <div class="add-container">
+        <p>这里模拟一个添加【InputNumber 计数器】</p>
+        <p>支持属性：:min,:max,:step,:precision,value</p>
+        <p>暂时设置为必须disabled</p>
+        <input id="inputMin" placeholder="最小值" type="number" maxlength="10">
+        <input id="inputMax" placeholder="最大值" type="number" maxlength="10">
+        <input id="inputStep" placeholder="步数" type="number" maxlength="10">
+        <input id="inputPrecision" placeholder="精度" type="number" maxlength="10">
+        <input id="inputValue" placeholder="默认值" type="number" maxlength="10">
+        <br/>
+        <button id="btnAddInputNumber">添加计数器</button>
+    </div>
+
+    <!-- 加载编辑器的容器 -->
+    <script id="container" name="content" type="text/plain"></script>
+    <!-- 配置文件 -->
+    <script type="text/javascript" src="./js/lib/ueditor.config.js"></script>
+    <!-- 编辑器源码文件 -->
+    <script type="text/javascript" src="./js/lib/ueditor.all.new.js"></script>
+
+    <!-- 实例化编辑器 -->
+    <script type="module">        
+        import injector from './js/framework-injector.js'
+
+        window.ue = injector.getEditor('container')
+
+        window.componentContainerList = []
+        ue.addListener('sourcemodechanged', function (t, enabled) {
+            if (enabled) {
+                injector.setDecompileHtmlToContent(this, componentContainerList, true)
+            } else {
+
+                componentContainerList = injector.getNeedInitComponentContainerList(this.window.document)
+
+                if (componentContainerList && componentContainerList.length > 0) {
+                    //将需要初始化的容器组合成执行js语句
+                    const evalStr = componentContainerList.map(item => { return injector.createJsTemplate(item) })
+                        .join(';')
+
+                    this.window.eval(evalStr)
+                }
+            }
+        })
+
+        ue.addListener('contentChange', function () {
+            console.log()
+        })
+    </script>
+
+
+    <script type="module">
+        import injector from './js/framework-injector.js'
+
+        function getValue(id) {
+            const value = document.getElementById(id).value * 1
+            const name = id.replace('input', '').toLowerCase()
+            return {
+                name: name,
+                attr: `:${name}`,
+                value: value > 0 ? value : 0
+            }
+        }
+
+        function getAttrHtml() {
+            return ['inputMin', 'inputMax', 'inputStep', 'inputPrecision', 'inputValue']
+                .map(id => getValue(id))
+                .filter(data => data.value > 0)
+                .map(data => `${data.attr}="${data.value}"`)
+                .join(' ')
+        }
+
+        function getInputNumberHtml() {
+            return `<el-input-number ${getAttrHtml()} :disabled="true"></el-input-number>`
+        }
+
+        document.getElementById('btnAddInputNumber').onclick = function () {
+            let html = ue.getContent()
+            let decompileHtml = injector.getDecompileHtml(html, componentContainerList)
+            ue.setContent(decompileHtml + getInputNumberHtml())
+            componentContainerList = injector.getNeedInitComponentContainerList(ue.window.document)
+            if (componentContainerList && componentContainerList.length > 0) {
+                //将需要初始化的容器组合成执行js语句
+                const evalStr = componentContainerList.map(item => { return injector.createJsTemplate(item) })
+                    .join(';')
+                ue.window.eval(evalStr)
+            }
+        }
+    </script>
+</body>
+
+</html>

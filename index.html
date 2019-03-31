@@ -6,151 +6,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>uEditor-framework-inject</title>
+    <style>
+        .add-container {
+            border: 1px solid #eee;
+            margin: 20px;
+            padding: 20px;
+        }
+
+        .add-container>* {
+            margin: 10px;
+            line-height: 26px;
+        }
+    </style>
 </head>
 
 <body>
     <h1>uEditor-framework-inject</h1>
 
+    <!-- 这里模拟一个添加【InputNumber 计数器】的模态框 -->
+    <div class="add-container">
+        <p>这里模拟一个添加【InputNumber 计数器】</p>
+        <p>支持属性：:min,:max,:step,:precision,value</p>
+        <p>暂时设置为必须disabled</p>
+        <input id="inputMin" placeholder="最小值" type="number" maxlength="10">
+        <input id="inputMax" placeholder="最大值" type="number" maxlength="10">
+        <input id="inputStep" placeholder="步数" type="number" maxlength="10">
+        <input id="inputPrecision" placeholder="精度" type="number" maxlength="10">
+        <input id="inputValue" placeholder="默认值" type="number" maxlength="10">
+        <br/>
+        <button id="btnAddInputNumber">添加计数器</button>
+    </div>
+
     <!-- 加载编辑器的容器 -->
-    <!-- <el-button type="primary">主要按钮</el-button><el-input placeholder="请输入内容"></el-input> -->
     <script id="container" name="content" type="text/plain"></script>
     <!-- 配置文件 -->
     <script type="text/javascript" src="./js/lib/ueditor.config.js"></script>
     <!-- 编辑器源码文件 -->
     <script type="text/javascript" src="./js/lib/ueditor.all.new.js"></script>
-    <!-- 注入导致的bug修复，功能实现 -->
-    <script type="text/javascript" src="./js/ueditor-need-cover.js"></script>
-    <!-- 样式框架注入器 -->
-    <script type="text/javascript" src="./js/ui-framework-injector.js"></script>
 
     <!-- 实例化编辑器 -->
-    <script type="text/javascript">
-        window.ue = UE.getEditor('container')
+    <script type="module">        
+        import injector from './js/framework-injector.js'
 
-        ue.setOpt({
-            'allowDivTransToP': false,
-            'disabledTableInTable': true
-        })
+        window.ue = injector.getEditor('container')
 
-        ue.addListener('ready', function () {
-            ueditorNeedCover(this)
-        })
-
-        function getNeedInitVueContainer(doc) {
-            const body = doc.body
-            const vueContainerList = []
-
-            function markVueComponent(node) {
-                const children = node.children
-                if (!children || children.length < 1) {
-                    return
-                }
-
-                for (let i = 0; i < children.length; i++) {
-                    if (children[i].nodeType === 1) {
-                        if (children[i].nodeName.toLowerCase().startsWith('el-')) {
-                            let parent = children[i].parentElement
-                            if (parent && parent.nodeName === 'BODY') {
-                                parent = children[i]
-                            }
-
-                            const originalHtml = parent.outerHTML
-                            parent.id = `component-id-${vueContainerList.length}`
-                            parent.contentEditable = false
-
-                            const data = {
-                                index: vueContainerList.length,
-                                id: parent.id,
-                                container: parent,
-                                outerHTML: parent.outerHTML,
-                                originalHtml: originalHtml
-                            }
-
-                            vueContainerList.push(data)
-
-                        } else {
-                            markVueComponent(children[i])
-                        }
-                    }
-                }
-            }
-
-            markVueComponent(body)
-
-            //由于需要编译的部分是不能进行编辑的，所以当body最后一个元素是不能进行编辑的，需要采用相同规则：补充一个p占位
-            if (body.children.length > 0) {
-                if (vueContainerList.some(item => {
-                    return item.container === body.children[body.children.length - 1]
-                })) {
-                    const p = doc.createElement('p')
-                    p.innerHTML = '<br />'
-                    body.appendChild(p)
-                }
-            }
-
-            return vueContainerList
-        }
-
-        function createJsTemplate() {
-
-        }
-
-        function getUeditorHtml(html, format) {
-            //这里执行和ueditor的getContent方法相同操作流程
-            //root.traversal 操作没加，代码太多影响阅读
-            let root = UE.htmlparser(html)
-            ue.filterOutputRule(root)
-            return root.toHtml(format)
-        }
-
-        window.vueContainerList = []
+        window.componentContainerList = []
         ue.addListener('sourcemodechanged', function (t, enabled) {
             if (enabled) {
-                let html = this.getContent()
-                let newHtml = html
-                if (vueContainerList && vueContainerList.length > 0) {
-                    vueContainerList.forEach(item => {
-                        //这里保持和sourcemode的源生change事件一致
-                        item.compileOuterHtml = getUeditorHtml(item.compileOuterHtml, true)
-                        newHtml = newHtml.replace(item.compileOuterHtml, item.originalHtml)
-
-                    })
-                }
-
-                if (newHtml !== html) {
-                    console.log(newHtml)
-                    this.setContent(newHtml)
-                }
-
+                injector.setDecompileHtmlToContent(this, componentContainerList, true)
             } else {
 
-                vueContainerList = getNeedInitVueContainer(this.window.document)
+                componentContainerList = injector.getNeedInitComponentContainerList(this.window.document)
 
-                if (vueContainerList && vueContainerList.length > 0) {
+                if (componentContainerList && componentContainerList.length > 0) {
                     //将需要初始化的容器组合成执行js语句
-                    const evalStr = vueContainerList.map(item => `new Vue({
-                        el:'#${item.id}',
-                             beforeMount(){
-                                 ${item.getBeforeMount && item.getBeforeMount()}
-                             },
-                            mounted(){
-                                window.parent.vueContainerList[${item.index}].compileOuterHtml=this.$el.outerHTML
-                                ${item.getMounted && item.getMounted()}
-                             }
-                    })`
-                        // `new Vue({
-                        //     el:'#${item.id}',
-                        //     beforeCreate(){
-                        //         ${item.getBeforeCreate()}
-                        //     }
-                        //     created(){
-                        //         ${item.getCreated()}
-                        //     }
-                        // })`
-                    ).join(';')
+                    const evalStr = componentContainerList.map(item => { return injector.createJsTemplate(item) })
+                        .join(';')
 
                     this.window.eval(evalStr)
-
                 }
             }
         })
@@ -160,9 +73,45 @@
         })
     </script>
 
-    <p id="p-html">
-        &lt;div&gt;&lt;el-button type="primary"&gt;主要按钮&lt;/el-button&gt;&lt;/div&gt;
-    </p>
+
+    <script type="module">
+        import injector from './js/framework-injector.js'
+
+        function getValue(id) {
+            const value = document.getElementById(id).value * 1
+            const name = id.replace('input', '').toLowerCase()
+            return {
+                name: name,
+                attr: `:${name}`,
+                value: value > 0 ? value : 0
+            }
+        }
+
+        function getAttrHtml() {
+            return ['inputMin', 'inputMax', 'inputStep', 'inputPrecision', 'inputValue']
+                .map(id => getValue(id))
+                .filter(data => data.value > 0)
+                .map(data => `${data.attr}="${data.value}"`)
+                .join(' ')
+        }
+
+        function getInputNumberHtml() {
+            return `<el-input-number ${getAttrHtml()} :disabled="true"></el-input-number>`
+        }
+
+        document.getElementById('btnAddInputNumber').onclick = function () {
+            let html = ue.getContent()
+            let decompileHtml = injector.getDecompileHtml(html, componentContainerList)
+            ue.setContent(decompileHtml + getInputNumberHtml())
+            componentContainerList = injector.getNeedInitComponentContainerList(ue.window.document)
+            if (componentContainerList && componentContainerList.length > 0) {
+                //将需要初始化的容器组合成执行js语句
+                const evalStr = componentContainerList.map(item => { return injector.createJsTemplate(item) })
+                    .join(';')
+                ue.window.eval(evalStr)
+            }
+        }
+    </script>
 </body>
 
 </html>
