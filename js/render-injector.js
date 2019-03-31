@@ -1,9 +1,9 @@
-(function () {
+export default function renderInjector(addFrameworkRefrence) {
     //复写render方法
     //源码在ueditor.all.js 6869行
 
-    //ling:添加一个加入element-ui依赖的方法
-    const addEURefrence = function () {
+    //ling:添加一个默认加入element-ui依赖的方法
+    addFrameworkRefrence = addFrameworkRefrence || function () {
         return '<link rel=\'stylesheet\' href=\'https://unpkg.com/element-ui/lib/theme-chalk/index.css\'>' +
             '<script type=\'text/javascript\' src=\'https://vuejs.org/js/vue.min.js\'></script>' +
             '<script src=\'https://unpkg.com/element-ui/lib/index.js\'></script>'
@@ -14,7 +14,7 @@
     const { ie } = UE.browser
 
     //修改后的原方法
-    const render = function (container, addEURefrence) {
+    const render = function (container, addFrameworkRefrence) {
         var me = this,
             options = me.options,
             getStyleValue = function (attr) {
@@ -51,7 +51,7 @@
                 'p{margin:5px 0;}</style>' +
                 (options.iframeCssUrl ? '<link rel=\'stylesheet\' type=\'text/css\' href=\'' + utils.unhtml(options.iframeCssUrl) + '\'/>' : '') +
                 //ling:就加这一句
-                addEURefrence() +
+                addFrameworkRefrence() +
                 (options.initialStyle ? '<style>' + options.initialStyle + '</style>' : '') +
                 '</head><body class=\'view\' ></body>' +
                 '<script type=\'text/javascript\' ' + (ie ? 'defer=\'defer\'' : '') + ' id=\'_initialScript\'>' +
@@ -80,7 +80,7 @@
     }
 
     UE.Editor.prototype.render = function (container) {
-        render.call(this, container, addEURefrence)
+        render.call(this, container, addFrameworkRefrence)
     }
 
-})()
+}
